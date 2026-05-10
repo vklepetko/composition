@@ -40,9 +40,7 @@ button, select{
   font-size:16px;
 }
 
-button{
-  cursor:pointer;
-}
+button{ cursor:pointer; }
 
 /* gallery wall */
 .frame{
@@ -67,7 +65,7 @@ button{
   touch-action:none;
 }
 
-/* 🧠 FIXED MAT: visible opening */
+/* 🧠 REAL RECTANGULAR MUSEUM MAT */
 .window::before{
   content:"";
   position:absolute;
@@ -75,14 +73,19 @@ button{
   pointer-events:none;
   z-index:3;
 
-  /* white mat with transparent center hole */
-  background:
-    radial-gradient(circle at center,
-      transparent 60%,
-      #ffffff 60%
-    );
+  background:#ffffff;
 
-  /* subtle depth */
+  /* creates thick mat opening */
+  padding:60px;
+
+  /* IMPORTANT: rectangular cutout (no circle) */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+
+  /* mat depth */
   box-shadow:
     inset 0 0 0 1px rgba(0,0,0,.06),
     inset 0 20px 60px rgba(0,0,0,.10);
