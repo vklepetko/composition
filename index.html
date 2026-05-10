@@ -2,8 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Wall Gallery Camera</title>
+
+<!-- IMPORTANT: disables browser zoom on iPad -->
+<meta name="viewport"
+  content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
+/>
+
+<title>Gallery Camera</title>
 
 <style>
 *{ box-sizing:border-box; }
@@ -12,8 +17,7 @@ body{
   margin:0;
   min-height:100vh;
 
-  /* 🧱 real wall feel (not pure white UI) */
-  background: radial-gradient(circle at 30% 20%, #f6f6f2, #e7e7e2);
+  background:radial-gradient(circle at 30% 20%, #f6f6f2, #e7e7e2);
 
   display:flex;
   flex-direction:column;
@@ -39,22 +43,18 @@ button, select{
   font-size:16px;
 }
 
-/* 🧱 WALL DEPTH LAYER */
+/* wall frame */
 .frame{
   position:relative;
   padding:110px;
 
-  /* soft wall shadow around frame area */
   background:rgba(255,255,255,0.25);
-
   border-radius:10px;
 
-  /* makes it feel mounted on wall */
-  box-shadow:
-    inset 0 0 80px rgba(0,0,0,.08);
+  box-shadow:inset 0 0 80px rgba(0,0,0,.08);
 }
 
-/* 🖼️ FRAME BODY (3D effect) */
+/* physical frame */
 .window{
   position:relative;
   width:min(90vw,900px);
@@ -63,18 +63,16 @@ button, select{
   overflow:hidden;
   background:#fff;
 
-  /* outer frame thickness illusion */
   border:18px solid #fdfdfc;
 
-  /* depth from wall */
   box-shadow:
     0 25px 60px rgba(0,0,0,.25),
     0 6px 18px rgba(0,0,0,.15);
 
-  transform: translateY(-2px);
+  touch-action:none;
 }
 
-/* 🧠 MAT LAYER (rectangular, clean cutout) */
+/* MAT */
 .window::before{
   content:"";
   position:absolute;
@@ -82,34 +80,38 @@ button, select{
   pointer-events:none;
   z-index:3;
 
-  background:#ffffff;
-
+  background:#fff;
   padding:55px;
 
-  /* clean museum cutout */
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
           mask-composite: exclude;
 
-  /* depth inside frame */
   box-shadow:
     inset 0 0 0 1px rgba(0,0,0,.06),
     inset 0 18px 50px rgba(0,0,0,.12);
 }
 
-/* 📸 IMAGE LAYER */
+/* canvas */
 canvas{
   width:100%;
   height:100%;
   display:block;
   background:#fff;
+
   position:relative;
   z-index:1;
+
+  /* CRITICAL for iPad */
+  touch-action:none;
+  -webkit-user-select:none;
+  user-select:none;
+  -webkit-touch-callout:none;
 }
 
-/* 📷 hidden camera */
+/* hidden camera */
 video{
   position:fixed;
   top:0;
@@ -126,6 +128,7 @@ video{
 
 <div class="controls">
   <select id="ratio">
+    <option value="auto">Auto</option>
     <option value="4 / 3">4:3</option>
     <option value="1 / 1">1:1</option>
     <option value="16 / 9">16:9</option>
@@ -162,6 +165,19 @@ function resizeCanvas(){
 }
 window.addEventListener("resize", resizeCanvas);
 
+/* AUTO orientation */
+function updateOrientation(){
+  const isPortrait = window.innerHeight > window.innerWidth;
+
+  if(document.getElementById("ratio").value === "auto"){
+    windowEl.style.aspectRatio = isPortrait ? "2 / 3" : "4 / 3";
+    setTimeout(resizeCanvas, 50);
+  }
+}
+
+window.addEventListener("resize", updateOrientation);
+window.addEventListener("orientationchange", updateOrientation);
+
 /* camera */
 async function startCamera(){
   try{
@@ -178,8 +194,9 @@ async function startCamera(){
     await new Promise(r => setTimeout(r, 200));
 
     resizeCanvas();
-    ready = true;
+    updateOrientation();
 
+    ready = true;
     requestAnimationFrame(draw);
 
   }catch(err){
@@ -188,7 +205,7 @@ async function startCamera(){
 }
 startCamera();
 
-/* draw loop */
+/* draw */
 function draw(){
   requestAnimationFrame(draw);
 
@@ -236,7 +253,42 @@ window.addEventListener("pointermove", e=>{
   lastY = e.clientY;
 });
 
-/* zoom */
+/* iPad-safe PINCH ZOOM (FIXED) */
+let lastDist = null;
+let initialScale = 1;
+
+function getDist(touches){
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+canvas.addEventListener("touchstart", e=>{
+  if(e.touches.length === 2){
+    e.preventDefault();
+    lastDist = getDist(e.touches);
+    initialScale = scale;
+  }
+},{ passive:false });
+
+canvas.addEventListener("touchmove", e=>{
+  if(e.touches.length !== 2) return;
+
+  e.preventDefault(); // STOP page zoom
+
+  const dist = getDist(e.touches);
+
+  if(lastDist){
+    const factor = dist / lastDist;
+    scale = Math.max(1, Math.min(5, initialScale * factor));
+  }
+},{ passive:false });
+
+canvas.addEventListener("touchend", ()=>{
+  lastDist = null;
+});
+
+/* mouse wheel zoom */
 canvas.addEventListener("wheel", e=>{
   e.preventDefault();
   scale += e.deltaY * -0.001;
@@ -246,8 +298,12 @@ canvas.addEventListener("wheel", e=>{
 /* aspect ratio */
 document.getElementById("ratio")
 .addEventListener("change", e=>{
-  windowEl.style.aspectRatio = e.target.value;
-  setTimeout(resizeCanvas, 50);
+  if(e.target.value === "auto"){
+    updateOrientation();
+  }else{
+    windowEl.style.aspectRatio = e.target.value;
+    setTimeout(resizeCanvas, 50);
+  }
 });
 
 /* snapshot */
