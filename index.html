@@ -44,7 +44,7 @@ button{
   cursor:pointer;
 }
 
-/* gallery wall spacing */
+/* gallery wall */
 .frame{
   background:#f7f7f4;
   padding:100px;
@@ -57,7 +57,6 @@ button{
   position:relative;
   width:min(90vw,900px);
 
-  /* default 4:3 */
   aspect-ratio:4 / 3;
 
   overflow:hidden;
@@ -68,23 +67,25 @@ button{
   touch-action:none;
 }
 
-/* MUSEUM MAT LAYER */
+/* 🧠 FIXED MAT: visible opening */
 .window::before{
   content:"";
   position:absolute;
   inset:0;
+  pointer-events:none;
+  z-index:3;
 
-  background:#ffffff;
+  /* white mat with transparent center hole */
+  background:
+    radial-gradient(circle at center,
+      transparent 60%,
+      #ffffff 60%
+    );
 
-  /* thick cutout opening (mat window) */
-  clip-path: inset(60px);
-
+  /* subtle depth */
   box-shadow:
     inset 0 0 0 1px rgba(0,0,0,.06),
     inset 0 20px 60px rgba(0,0,0,.10);
-
-  z-index:3;
-  pointer-events:none;
 }
 
 /* ARTWORK */
@@ -124,7 +125,7 @@ video{
     <option value="1 / 1">1:1</option>
     <option value="16 / 9">16:9</option>
     <option value="9 / 16">9:16</option>
-    <option value="2 / 3">2:3</option> <!-- ADDED -->
+    <option value="2 / 3">2:3</option>
   </select>
 
   <button id="snap">Take Photo</button>
@@ -185,7 +186,7 @@ async function startCamera(){
 }
 startCamera();
 
-/* draw */
+/* draw loop */
 function draw(){
   requestAnimationFrame(draw);
 
@@ -241,7 +242,7 @@ canvas.addEventListener("wheel", e=>{
   scale = Math.max(1, Math.min(5, scale));
 },{ passive:false });
 
-/* aspect ratio switch */
+/* aspect ratio */
 document.getElementById("ratio")
 .addEventListener("change", e=>{
   windowEl.style.aspectRatio = e.target.value;
