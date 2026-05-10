@@ -21,7 +21,7 @@
     align-items: center;
 
     padding: 20px;
-    gap: 18px;
+    gap: 16px;
 
     color: white;
   }
@@ -46,15 +46,11 @@
 
   button {
     background: white;
-    cursor: pointer;
     font-weight: 600;
+    cursor: pointer;
   }
 
-  button:hover {
-    background: #eaeaea;
-  }
-
-  /* EXTRA THICK MUSEUM FRAME */
+  /* THICK MUSEUM FRAME */
   .frame {
     background: #f8f8f5;
 
@@ -68,16 +64,10 @@
 
     box-shadow:
       0 2px 2px rgba(255,255,255,0.85) inset,
-
-      /* layered mat depth */
       0 0 0 18px #d9d3c8,
       0 0 0 28px #bdb6aa,
       0 0 0 38px #8f887c,
-
-      /* wall shadow */
       0 50px 140px rgba(0,0,0,0.7);
-
-    border-radius: 4px;
   }
 
   .window {
@@ -91,8 +81,7 @@
 
     touch-action: none;
 
-    box-shadow:
-      inset 0 0 35px rgba(0,0,0,0.75);
+    box-shadow: inset 0 0 35px rgba(0,0,0,0.75);
   }
 
   canvas {
@@ -101,7 +90,6 @@
     display: block;
   }
 
-  /* grid overlay */
   .grid {
     position: absolute;
     inset: 0;
@@ -153,13 +141,14 @@
   </div>
 </div>
 
-<video id="video" autoplay playsinline style="display:none;"></video>
+<video id="video" autoplay playsinline muted style="display:none;"></video>
 
 <script>
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
+/* state */
 let scale = 1;
 let offsetX = 0;
 let offsetY = 0;
@@ -168,43 +157,59 @@ let dragging = false;
 let lastX = 0;
 let lastY = 0;
 
+/* camera */
 async function startCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "environment" },
-    audio: false
-  });
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+      audio: false
+    });
 
-  video.srcObject = stream;
+    video.srcObject = stream;
+
+    await video.play(); // IMPORTANT for Safari
+
+    video.onloadedmetadata = () => {
+      requestAnimationFrame(draw);
+    };
+
+  } catch (err) {
+    console.error(err);
+    alert("Camera access failed");
+  }
 }
+
 startCamera();
 
-/* draw loop */
+/* DRAW LOOP (Safari-safe + crop zoom, no stretching) */
 function draw() {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
 
-  if (vw && vh) {
-    canvas.width = vw;
-    canvas.height = vh;
-
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, vw, vh);
-
-    ctx.drawImage(
-      video,
-      offsetX,
-      offsetY,
-      vw * scale,
-      vh * scale
-    );
+  if (!vw || !vh) {
+    requestAnimationFrame(draw);
+    return;
   }
+
+  canvas.width = vw;
+  canvas.height = vh;
+
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, vw, vh);
+
+  /* "cover" style transform (crop, NOT stretch) */
+  const drawW = vw * scale;
+  const drawH = vh * scale;
+
+  const x = (vw - drawW) / 2 + offsetX;
+  const y = (vh - drawH) / 2 + offsetY;
+
+  ctx.drawImage(video, x, y, drawW, drawH);
 
   requestAnimationFrame(draw);
 }
 
-video.addEventListener("loadedmetadata", draw);
-
-/* drag */
+/* mouse drag */
 canvas.addEventListener("mousedown", e => {
   dragging = true;
   lastX = e.clientX;
@@ -223,19 +228,20 @@ window.addEventListener("mousemove", e => {
   lastY = e.clientY;
 });
 
-/* zoom */
+/* zoom (mouse wheel) */
 canvas.addEventListener("wheel", e => {
   e.preventDefault();
+
   scale += e.deltaY * -0.0015;
   scale = Math.min(Math.max(1, 5), scale);
 }, { passive: false });
 
-/* touch pinch */
+/* pinch zoom */
 let lastDist = null;
 
 canvas.addEventListener("touchstart", e => {
   if (e.touches.length === 2) {
-    lastDist = getDist(e.touches);
+    lastDist = dist(e.touches);
   }
 });
 
@@ -243,22 +249,28 @@ canvas.addEventListener("touchmove", e => {
   if (e.touches.length === 2) {
     e.preventDefault();
 
-    const dist = getDist(e.touches);
+    const d = dist(e.touches);
 
     if (lastDist) {
-      scale *= dist / lastDist;
+      scale *= d / lastDist;
       scale = Math.min(Math.max(1, 5), scale);
     }
 
-    lastDist = dist;
+    lastDist = d;
   }
 }, { passive: false });
 
-function getDist(t) {
+function dist(t) {
   const dx = t[0].clientX - t[1].clientX;
   const dy = t[0].clientY - t[1].clientY;
   return Math.sqrt(dx*dx + dy*dy);
 }
+
+/* aspect ratio (viewfinder crop only) */
+document.getElementById("ratio").addEventListener("change", e => {
+  const v = e.target.value;
+  canvas.parentElement.style.aspectRatio = v;
+});
 
 /* capture EXACT frame */
 document.getElementById("snap").addEventListener("click", () => {
@@ -266,12 +278,6 @@ document.getElementById("snap").addEventListener("click", () => {
   link.download = "composition.png";
   link.href = canvas.toDataURL("image/png");
   link.click();
-});
-
-/* aspect ratio */
-document.getElementById("ratio").addEventListener("change", e => {
-  const v = e.target.value;
-  canvas.parentElement.style.aspectRatio = v;
 });
 </script>
 
