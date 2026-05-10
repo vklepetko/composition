@@ -36,11 +36,13 @@ body{
   top:20px;
   left:20px;
   z-index:10;
+  display:flex;
+  gap:10px;
+  align-items:center;
 }
 
-button{
-  padding:10px 14px;
-  border:none;
+select{
+  padding:10px 12px;
   border-radius:10px;
   font-size:16px;
 }
@@ -55,11 +57,12 @@ button{
 .window{
   position:relative;
   width:900px;
-  aspect-ratio:4 / 3;
+  aspect-ratio:3 / 2;
   background:#fff;
   border:18px solid #fdfdfc;
   box-shadow:0 25px 60px rgba(0,0,0,.25), 0 6px 18px rgba(0,0,0,.15);
   overflow:hidden;
+  cursor:pointer;
 }
 
 .window::before{
@@ -103,13 +106,24 @@ video{
 <body>
 
 <div class="controls">
-  <button id="snap">Photo</button>
+  <select id="aspectSelect">
+    <option value="3/2">3:2 (DSLR / Photo)</option>
+    <option value="2/3">2:3 (Portrait Photo)</option>
+
+    <option value="4/3">4:3 (Classic)</option>
+    <option value="16/9">16:9 (Widescreen)</option>
+
+    <option value="1/1">1:1 (Square)</option>
+
+    <option value="3/4">3:4 (Portrait crop)</option>
+    <option value="9/16">9:16 (Phone story)</option>
+  </select>
 </div>
 
 <div class="stage" id="stage">
   <div class="wall" id="wall">
     <div class="frame">
-      <div class="window">
+      <div class="window" id="snapArea">
         <canvas id="canvas"></canvas>
       </div>
     </div>
@@ -124,11 +138,20 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const video = document.getElementById("video");
 const stage = document.getElementById("stage");
+const windowEl = document.querySelector(".window");
+const snapArea = document.getElementById("snapArea");
+const aspectSelect = document.getElementById("aspectSelect");
 
 let scale = 1;
 let offsetX = 0;
 let offsetY = 0;
 let ready = false;
+
+/* ---------------- ASPECT RATIO ---------------- */
+aspectSelect.addEventListener("change", (e) => {
+  windowEl.style.aspectRatio = e.target.value;
+  resize();
+});
 
 /* ---------------- WALL FIT ---------------- */
 function fitWall(){
@@ -167,7 +190,7 @@ function resize(){
 }
 window.addEventListener("resize", resize);
 
-/* ---------------- DRAW VIDEO ---------------- */
+/* ---------------- DRAW ---------------- */
 function draw(){
   requestAnimationFrame(draw);
   if(!ready || video.readyState < 2) return;
@@ -186,68 +209,59 @@ function draw(){
   ctx.drawImage(video, x, y, w, h);
 }
 
-/* ---------------- SNAP (FULL EXPORT) ---------------- */
-document.getElementById("snap").onclick = async () => {
+/* ---------------- SNAP (tap anywhere) ---------------- */
+snapArea.addEventListener("click", takePhoto);
 
-  // scale up for high quality export
+function takePhoto(){
+
   const exportCanvas = document.createElement("canvas");
   const rect = stage.getBoundingClientRect();
-
   const scaleFactor = 2;
 
   exportCanvas.width = rect.width * scaleFactor;
   exportCanvas.height = rect.height * scaleFactor;
 
   const ex = exportCanvas.getContext("2d");
-
-  // scale for sharp output
   ex.scale(scaleFactor, scaleFactor);
 
-  // 1. draw background (wall gradient like CSS)
   const gradient = ex.createRadialGradient(
     rect.width * 0.3, rect.height * 0.2, 100,
     rect.width * 0.5, rect.height * 0.5, rect.width
   );
+
   gradient.addColorStop(0, "#f6f6f2");
   gradient.addColorStop(1, "#e7e7e2");
 
   ex.fillStyle = gradient;
   ex.fillRect(0,0,rect.width,rect.height);
 
-  // 2. draw frame using DOM snapshot of just window area
-  const windowEl = document.querySelector(".window");
   const winRect = windowEl.getBoundingClientRect();
 
-  // draw frame background
   ex.save();
   ex.translate(
     (rect.width - winRect.width)/2,
     (rect.height - winRect.height)/2
   );
 
-  // frame
   ex.fillStyle = "#f7f7f4";
   roundRect(ex, -100, -100, winRect.width + 200, winRect.height + 200, 8);
   ex.fill();
 
-  // window
   ex.fillStyle = "#fff";
   ex.fillRect(0,0,winRect.width,winRect.height);
 
-  // 3. draw video canvas content
   const sourceCanvas = document.getElementById("canvas");
   ex.drawImage(sourceCanvas, 0, 0, winRect.width, winRect.height);
 
   ex.restore();
 
-  // download
   const link = document.createElement("a");
   link.download = "gallery-photo.png";
   link.href = exportCanvas.toDataURL("image/png");
   link.click();
-};
+}
 
-/* ---------------- helpers ---------------- */
+/* ---------------- ROUND RECT ---------------- */
 function roundRect(ctx, x, y, w, h, r){
   ctx.beginPath();
   ctx.moveTo(x+r,y);
@@ -258,7 +272,7 @@ function roundRect(ctx, x, y, w, h, r){
   ctx.closePath();
 }
 
-/* ---------------- interactions ---------------- */
+/* ---------------- INTERACTION (pan + pinch zoom) ---------------- */
 let pointers = new Map();
 let dragging = false;
 let lx = 0, ly = 0;
