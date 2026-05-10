@@ -8,29 +8,32 @@
 <style>
 *{ box-sizing:border-box; }
 
-body{
+html, body{
   margin:0;
-  height:100vh;
-  overflow:hidden;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  height:100%;
+  overflow:hidden; /* 🔥 prevents iPad scroll */
   background:radial-gradient(circle at 30% 20%, #f6f6f2, #e7e7e2);
   font-family:Arial,sans-serif;
 }
 
+/* FULL SCREEN LOCKED STAGE */
 .stage{
-  width:100vw;
-  height:100vh;
+  position:fixed;
+  inset:0;
   display:flex;
   align-items:center;
   justify-content:center;
 }
 
+/* WALL ALWAYS FITS SCREEN */
 .wall{
   transform-origin:center;
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
 
+/* CONTROLS */
 .controls{
   position:fixed;
   top:20px;
@@ -41,28 +44,34 @@ body{
   align-items:center;
 }
 
-select{
+button, select{
   padding:10px 12px;
   border-radius:10px;
   font-size:16px;
+  border:none;
 }
 
+button{
+  cursor:pointer;
+}
+
+/* FRAME */
 .frame{
   background:#f7f7f4;
-  padding:100px;
+  padding:80px;
   border-radius:8px;
   box-shadow:0 60px 160px rgba(0,0,0,.20);
 }
 
+/* WINDOW (aspect ratio controlled) */
 .window{
   position:relative;
-  width:900px;
+  width:min(900px, 80vw);
   aspect-ratio:3 / 2;
   background:#fff;
   border:18px solid #fdfdfc;
   box-shadow:0 25px 60px rgba(0,0,0,.25), 0 6px 18px rgba(0,0,0,.15);
   overflow:hidden;
-  cursor:pointer;
 }
 
 .window::before{
@@ -89,9 +98,9 @@ canvas{
   width:100%;
   height:100%;
   display:block;
-  touch-action:none;
 }
 
+/* hidden camera */
 video{
   position:fixed;
   top:0;
@@ -106,24 +115,23 @@ video{
 <body>
 
 <div class="controls">
+  <button id="toggle">Pause</button>
+
   <select id="aspectSelect">
     <option value="3/2">3:2 (DSLR / Photo)</option>
     <option value="2/3">2:3 (Portrait Photo)</option>
-
     <option value="4/3">4:3 (Classic)</option>
     <option value="16/9">16:9 (Widescreen)</option>
-
     <option value="1/1">1:1 (Square)</option>
-
     <option value="3/4">3:4 (Portrait crop)</option>
     <option value="9/16">9:16 (Phone story)</option>
   </select>
 </div>
 
-<div class="stage" id="stage">
+<div class="stage">
   <div class="wall" id="wall">
     <div class="frame">
-      <div class="window" id="snapArea">
+      <div class="window">
         <canvas id="canvas"></canvas>
       </div>
     </div>
@@ -137,39 +145,35 @@ const wall = document.getElementById("wall");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const video = document.getElementById("video");
-const stage = document.getElementById("stage");
 const windowEl = document.querySelector(".window");
-const snapArea = document.getElementById("snapArea");
 const aspectSelect = document.getElementById("aspectSelect");
+const toggleBtn = document.getElementById("toggle");
 
-let scale = 1;
-let offsetX = 0;
-let offsetY = 0;
-let ready = false;
+let running = true;
+let stream = null;
 
-/* ---------------- ASPECT RATIO ---------------- */
-aspectSelect.addEventListener("change", (e) => {
-  windowEl.style.aspectRatio = e.target.value;
-  resize();
-});
-
-/* ---------------- WALL FIT ---------------- */
+/* ---------------- LOCK WALL TO SCREEN ---------------- */
 function fitWall(){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
-  const baseWidth = 1200;
-  const baseHeight = 900;
+  const frame = 1200;
+  const scale = Math.min(vw / frame, vh / frame);
 
-  const s = Math.min(vw / baseWidth, vh / baseHeight) * 0.95;
-  wall.style.transform = `scale(${s})`;
+  wall.style.transform = `scale(${scale})`;
 }
 window.addEventListener("resize", fitWall);
 fitWall();
 
+/* ---------------- ASPECT RATIO ---------------- */
+aspectSelect.addEventListener("change", (e)=>{
+  windowEl.style.aspectRatio = e.target.value;
+  resize();
+});
+
 /* ---------------- CAMERA ---------------- */
 async function startCamera(){
-  const stream = await navigator.mediaDevices.getUserMedia({
+  stream = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:"environment" },
     audio:false
   });
@@ -178,7 +182,6 @@ async function startCamera(){
   await video.play();
 
   resize();
-  ready = true;
   requestAnimationFrame(draw);
 }
 startCamera();
@@ -190,146 +193,27 @@ function resize(){
 }
 window.addEventListener("resize", resize);
 
-/* ---------------- DRAW ---------------- */
+/* ---------------- DRAW LOOP ---------------- */
 function draw(){
   requestAnimationFrame(draw);
-  if(!ready || video.readyState < 2) return;
+  if(!running) return;
+  if(video.readyState < 2) return;
 
-  const vw = video.videoWidth;
-  const vh = video.videoHeight;
-
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  const w = vw * scale;
-  const h = vh * scale;
-
-  const x = (canvas.width - w)/2 + offsetX;
-  const y = (canvas.height - h)/2 + offsetY;
-
-  ctx.drawImage(video, x, y, w, h);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 }
 
-/* ---------------- SNAP (tap anywhere) ---------------- */
-snapArea.addEventListener("click", takePhoto);
+/* ---------------- PAUSE / PLAY ---------------- */
+toggleBtn.addEventListener("click", ()=>{
+  running = !running;
 
-function takePhoto(){
-
-  const exportCanvas = document.createElement("canvas");
-  const rect = stage.getBoundingClientRect();
-  const scaleFactor = 2;
-
-  exportCanvas.width = rect.width * scaleFactor;
-  exportCanvas.height = rect.height * scaleFactor;
-
-  const ex = exportCanvas.getContext("2d");
-  ex.scale(scaleFactor, scaleFactor);
-
-  const gradient = ex.createRadialGradient(
-    rect.width * 0.3, rect.height * 0.2, 100,
-    rect.width * 0.5, rect.height * 0.5, rect.width
-  );
-
-  gradient.addColorStop(0, "#f6f6f2");
-  gradient.addColorStop(1, "#e7e7e2");
-
-  ex.fillStyle = gradient;
-  ex.fillRect(0,0,rect.width,rect.height);
-
-  const winRect = windowEl.getBoundingClientRect();
-
-  ex.save();
-  ex.translate(
-    (rect.width - winRect.width)/2,
-    (rect.height - winRect.height)/2
-  );
-
-  ex.fillStyle = "#f7f7f4";
-  roundRect(ex, -100, -100, winRect.width + 200, winRect.height + 200, 8);
-  ex.fill();
-
-  ex.fillStyle = "#fff";
-  ex.fillRect(0,0,winRect.width,winRect.height);
-
-  const sourceCanvas = document.getElementById("canvas");
-  ex.drawImage(sourceCanvas, 0, 0, winRect.width, winRect.height);
-
-  ex.restore();
-
-  const link = document.createElement("a");
-  link.download = "gallery-photo.png";
-  link.href = exportCanvas.toDataURL("image/png");
-  link.click();
-}
-
-/* ---------------- ROUND RECT ---------------- */
-function roundRect(ctx, x, y, w, h, r){
-  ctx.beginPath();
-  ctx.moveTo(x+r,y);
-  ctx.arcTo(x+w,y,x+w,y+h,r);
-  ctx.arcTo(x+w,y+h,x,y+h,r);
-  ctx.arcTo(x,y+h,x,y,r);
-  ctx.arcTo(x,y,x+w,y,r);
-  ctx.closePath();
-}
-
-/* ---------------- INTERACTION (pan + pinch zoom) ---------------- */
-let pointers = new Map();
-let dragging = false;
-let lx = 0, ly = 0;
-let startDist = 0;
-let startScale = 1;
-
-function dist(a,b){
-  return Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
-}
-
-canvas.addEventListener("pointerdown", e=>{
-  canvas.setPointerCapture(e.pointerId);
-  pointers.set(e.pointerId, e);
-
-  if(pointers.size === 1){
-    dragging = true;
-    lx = e.clientX;
-    ly = e.clientY;
-  }
-
-  if(pointers.size === 2){
-    const pts = [...pointers.values()];
-    startDist = dist(pts[0], pts[1]);
-    startScale = scale;
-    dragging = false;
+  if(running){
+    toggleBtn.textContent = "Pause";
+    requestAnimationFrame(draw);
+  }else{
+    toggleBtn.textContent = "Play";
+    // freeze frame (no clearing, last canvas stays visible)
   }
 });
-
-canvas.addEventListener("pointermove", e=>{
-  if(!pointers.has(e.pointerId)) return;
-  pointers.set(e.pointerId, e);
-
-  if(pointers.size === 2){
-    const pts = [...pointers.values()];
-    const d = dist(pts[0], pts[1]);
-
-    scale = startScale * (d / startDist);
-    scale = Math.max(1, Math.min(5, scale));
-    return;
-  }
-
-  if(!dragging) return;
-
-  offsetX += e.clientX - lx;
-  offsetY += e.clientY - ly;
-
-  lx = e.clientX;
-  ly = e.clientY;
-});
-
-function endPointer(e){
-  pointers.delete(e.pointerId);
-  dragging = false;
-}
-
-canvas.addEventListener("pointerup", endPointer);
-canvas.addEventListener("pointercancel", endPointer);
 </script>
 
 </body>
