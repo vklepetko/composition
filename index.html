@@ -2,38 +2,48 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-
-<!-- IMPORTANT: disables browser zoom on iPad -->
-<meta name="viewport"
-  content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
-/>
-
-<title>Gallery Camera</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Fit Gallery Camera</title>
 
 <style>
 *{ box-sizing:border-box; }
 
 body{
   margin:0;
-  min-height:100vh;
-
-  background:radial-gradient(circle at 30% 20%, #f6f6f2, #e7e7e2);
+  height:100vh;
+  overflow:hidden;
 
   display:flex;
-  flex-direction:column;
   align-items:center;
   justify-content:center;
-  gap:16px;
 
+  background:radial-gradient(circle at 30% 20%, #f6f6f2, #e7e7e2);
   font-family:Arial,sans-serif;
-  padding:30px;
+}
+
+/* 🎭 STAGE = scales entire wall + frame */
+.stage{
+  width:100vw;
+  height:100vh;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+/* 🧱 WALL CONTAINER (will be scaled dynamically) */
+.wall{
+  transform-origin:center;
 }
 
 /* controls */
 .controls{
+  position:fixed;
+  top:20px;
+  left:20px;
   display:flex;
   gap:10px;
-  flex-wrap:wrap;
+  z-index:10;
 }
 
 button, select{
@@ -43,24 +53,20 @@ button, select{
   font-size:16px;
 }
 
-/* wall frame */
+/* 🧱 WALL BACKGROUND */
 .frame{
-  position:relative;
-  padding:110px;
-
-  background:rgba(255,255,255,0.25);
-  border-radius:10px;
-
-  box-shadow:inset 0 0 80px rgba(0,0,0,.08);
+  background:#f7f7f4;
+  padding:100px;
+  border-radius:8px;
+  box-shadow:0 60px 160px rgba(0,0,0,.20);
 }
 
-/* physical frame */
+/* 🖼️ FRAME */
 .window{
   position:relative;
-  width:min(90vw,900px);
+  width:900px;
   aspect-ratio:4 / 3;
 
-  overflow:hidden;
   background:#fff;
 
   border:18px solid #fdfdfc;
@@ -69,7 +75,7 @@ button, select{
     0 25px 60px rgba(0,0,0,.25),
     0 6px 18px rgba(0,0,0,.15);
 
-  touch-action:none;
+  overflow:hidden;
 }
 
 /* MAT */
@@ -99,19 +105,10 @@ canvas{
   width:100%;
   height:100%;
   display:block;
-  background:#fff;
-
-  position:relative;
-  z-index:1;
-
-  /* CRITICAL for iPad */
   touch-action:none;
-  -webkit-user-select:none;
-  user-select:none;
-  -webkit-touch-callout:none;
 }
 
-/* hidden camera */
+/* hidden video */
 video{
   position:fixed;
   top:0;
@@ -119,7 +116,6 @@ video{
   width:2px;
   height:2px;
   opacity:0.001;
-  pointer-events:none;
 }
 </style>
 </head>
@@ -127,85 +123,91 @@ video{
 <body>
 
 <div class="controls">
-  <select id="ratio">
-    <option value="auto">Auto</option>
-    <option value="4 / 3">4:3</option>
-    <option value="1 / 1">1:1</option>
-    <option value="16 / 9">16:9</option>
-    <option value="9 / 16">9:16</option>
-    <option value="2 / 3">2:3</option>
-  </select>
-
-  <button id="snap">Take Photo</button>
+  <button id="snap">Photo</button>
 </div>
 
-<div class="frame">
-  <div class="window" id="window">
-    <canvas id="canvas"></canvas>
+<div class="stage">
+  <div class="wall" id="wall">
+
+    <div class="frame">
+      <div class="window">
+        <canvas id="canvas"></canvas>
+      </div>
+    </div>
+
   </div>
 </div>
 
 <video id="video" autoplay muted playsinline></video>
 
 <script>
-const video = document.getElementById("video");
+const wall = document.getElementById("wall");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-const windowEl = document.getElementById("window");
 
-let ready = false;
+let video = document.getElementById("video");
+
 let scale = 1;
 let offsetX = 0;
 let offsetY = 0;
+let ready = false;
 
-/* resize */
-function resizeCanvas(){
-  canvas.width = canvas.clientWidth;
-  canvas.height = canvas.clientHeight;
+/* ---------------------------
+   FIT WHOLE WALL TO SCREEN
+----------------------------*/
+function fitWall(){
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  const baseWidth = 1200;
+  const baseHeight = 900;
+
+  const scaleX = vw / baseWidth;
+  const scaleY = vh / baseHeight;
+
+  const s = Math.min(scaleX, scaleY) * 0.95;
+
+  wall.style.transform = `scale(${s})`;
 }
-window.addEventListener("resize", resizeCanvas);
 
-/* AUTO orientation */
-function updateOrientation(){
-  const isPortrait = window.innerHeight > window.innerWidth;
+window.addEventListener("resize", fitWall);
+fitWall();
 
-  if(document.getElementById("ratio").value === "auto"){
-    windowEl.style.aspectRatio = isPortrait ? "2 / 3" : "4 / 3";
-    setTimeout(resizeCanvas, 50);
-  }
-}
-
-window.addEventListener("resize", updateOrientation);
-window.addEventListener("orientationchange", updateOrientation);
-
-/* camera */
+/* ---------------------------
+   CAMERA
+----------------------------*/
 async function startCamera(){
-  try{
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio:false,
-      video:{ facingMode:{ ideal:"environment" } }
-    });
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:"environment" },
+    audio:false
+  });
 
-    video.srcObject = stream;
+  video.srcObject = stream;
 
-    await new Promise(r => video.onloadedmetadata = r);
-    await video.play();
+  await new Promise(r => video.onloadedmetadata = r);
+  await video.play();
 
-    await new Promise(r => setTimeout(r, 200));
+  resize();
+  ready = true;
 
-    resizeCanvas();
-    updateOrientation();
-
-    ready = true;
-    requestAnimationFrame(draw);
-
-  }catch(err){
-    alert("Camera failed. Use HTTPS and allow permissions.");
-  }
+  requestAnimationFrame(draw);
 }
 startCamera();
 
-/* draw */
+/* ---------------------------
+   CANVAS SIZE
+----------------------------*/
+function resize(){
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+}
+
+window.addEventListener("resize", resize);
+
+/* ---------------------------
+   DRAW LOOP
+----------------------------*/
 function draw(){
   requestAnimationFrame(draw);
 
@@ -215,28 +217,28 @@ function draw(){
   const vw = video.videoWidth;
   const vh = video.videoHeight;
 
-  if(!vw || !vh) return;
-
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  const drawW = vw * scale;
-  const drawH = vh * scale;
+  const w = vw * scale;
+  const h = vh * scale;
 
-  const x = (canvas.width - drawW)/2 + offsetX;
-  const y = (canvas.height - drawH)/2 + offsetY;
+  const x = (canvas.width - w)/2 + offsetX;
+  const y = (canvas.height - h)/2 + offsetY;
 
-  ctx.drawImage(video, x, y, drawW, drawH);
+  ctx.drawImage(video, x, y, w, h);
 }
 
-/* drag */
+/* ---------------------------
+   DRAG
+----------------------------*/
 let dragging = false;
-let lastX = 0;
-let lastY = 0;
+let lx = 0;
+let ly = 0;
 
 canvas.addEventListener("pointerdown", e=>{
   dragging = true;
-  lastX = e.clientX;
-  lastY = e.clientY;
+  lx = e.clientX;
+  ly = e.clientY;
 });
 
 window.addEventListener("pointerup", ()=>{
@@ -246,74 +248,32 @@ window.addEventListener("pointerup", ()=>{
 window.addEventListener("pointermove", e=>{
   if(!dragging) return;
 
-  offsetX += e.clientX - lastX;
-  offsetY += e.clientY - lastY;
+  offsetX += e.clientX - lx;
+  offsetY += e.clientY - ly;
 
-  lastX = e.clientX;
-  lastY = e.clientY;
+  lx = e.clientX;
+  ly = e.clientY;
 });
 
-/* iPad-safe PINCH ZOOM (FIXED) */
-let lastDist = null;
-let initialScale = 1;
-
-function getDist(touches){
-  const dx = touches[0].clientX - touches[1].clientX;
-  const dy = touches[0].clientY - touches[1].clientY;
-  return Math.sqrt(dx*dx + dy*dy);
-}
-
-canvas.addEventListener("touchstart", e=>{
-  if(e.touches.length === 2){
-    e.preventDefault();
-    lastDist = getDist(e.touches);
-    initialScale = scale;
-  }
-},{ passive:false });
-
-canvas.addEventListener("touchmove", e=>{
-  if(e.touches.length !== 2) return;
-
-  e.preventDefault(); // STOP page zoom
-
-  const dist = getDist(e.touches);
-
-  if(lastDist){
-    const factor = dist / lastDist;
-    scale = Math.max(1, Math.min(5, initialScale * factor));
-  }
-},{ passive:false });
-
-canvas.addEventListener("touchend", ()=>{
-  lastDist = null;
-});
-
-/* mouse wheel zoom */
+/* ---------------------------
+   ZOOM
+----------------------------*/
 canvas.addEventListener("wheel", e=>{
   e.preventDefault();
+
   scale += e.deltaY * -0.001;
   scale = Math.max(1, Math.min(5, scale));
 },{ passive:false });
 
-/* aspect ratio */
-document.getElementById("ratio")
-.addEventListener("change", e=>{
-  if(e.target.value === "auto"){
-    updateOrientation();
-  }else{
-    windowEl.style.aspectRatio = e.target.value;
-    setTimeout(resizeCanvas, 50);
-  }
-});
-
-/* snapshot */
-document.getElementById("snap")
-.addEventListener("click", ()=>{
+/* ---------------------------
+   SNAP
+----------------------------*/
+document.getElementById("snap").onclick = ()=>{
   const a = document.createElement("a");
-  a.download = "gallery-photo.png";
-  a.href = canvas.toDataURL("image/png");
+  a.download = "photo.png";
+  a.href = canvas.toDataURL();
   a.click();
-});
+};
 </script>
 
 </body>
