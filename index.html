@@ -2,12 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta
-  name="viewport"
-  content="width=device-width, initial-scale=1.0, viewport-fit=cover"
-/>
-
-<title>Composition Camera</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Gallery Camera</title>
 
 <style>
 *{
@@ -18,8 +14,7 @@ body{
   margin:0;
   min-height:100vh;
 
-  /* soft gallery wall */
-  background:#efefec;
+  background:#eeeeeb;
 
   display:flex;
   flex-direction:column;
@@ -28,19 +23,17 @@ body{
   gap:16px;
 
   font-family:Arial,sans-serif;
-  color:white;
   padding:20px;
 }
 
-/* controls stay minimal */
+/* controls */
 .controls{
   display:flex;
   gap:10px;
   flex-wrap:wrap;
 }
 
-button,
-select{
+button, select{
   padding:10px 14px;
   border:none;
   border-radius:10px;
@@ -51,58 +44,62 @@ button{
   cursor:pointer;
 }
 
-/* OUTER GALLERY SPACE */
+/* gallery wall spacing */
 .frame{
-  background:#f6f6f3;
-  padding:90px;                 /* BIG gallery breathing space */
-  box-shadow:0 50px 140px rgba(0,0,0,.22);
-  border-radius:6px;
+  background:#f7f7f4;
+  padding:100px;
+  box-shadow:0 60px 160px rgba(0,0,0,.20);
+  border-radius:8px;
 }
 
-/* MUSEUM MAT / ART WINDOW */
+/* ART FRAME */
 .window{
   position:relative;
   width:min(90vw,900px);
-  aspect-ratio:4/3;
-  overflow:hidden;
 
-  /* pure museum white mat */
+  /* default 4:3 */
+  aspect-ratio:4 / 3;
+
+  overflow:hidden;
   background:#ffffff;
 
-  /* very thick fine art border */
-  border:48px solid #ffffff;
-
-  /* subtle realism */
-  box-shadow:
-    0 18px 55px rgba(0,0,0,.18),
-    inset 0 0 0 1px rgba(0,0,0,.05);
+  box-shadow:0 30px 90px rgba(0,0,0,.18);
 
   touch-action:none;
 }
 
-/* floating artwork depth layer */
+/* MUSEUM MAT LAYER */
 .window::before{
   content:"";
   position:absolute;
-  inset:48px;
+  inset:0;
+
+  background:#ffffff;
+
+  /* thick cutout opening (mat window) */
+  clip-path: inset(60px);
 
   box-shadow:
-    0 0 0 1px rgba(0,0,0,.04),
-    0 20px 60px rgba(0,0,0,.12);
+    inset 0 0 0 1px rgba(0,0,0,.06),
+    inset 0 20px 60px rgba(0,0,0,.10);
 
+  z-index:3;
   pointer-events:none;
 }
 
-/* canvas = artwork surface */
+/* ARTWORK */
 canvas{
   width:100%;
   height:100%;
   display:block;
+
   background:#fff;
-  touch-action:none;
+
+  position:relative;
+  z-index:1;
 }
 
-/* Safari camera fix (unchanged) */
+/* hidden camera */
 video{
   position:fixed;
   top:0;
@@ -127,6 +124,7 @@ video{
     <option value="1 / 1">1:1</option>
     <option value="16 / 9">16:9</option>
     <option value="9 / 16">9:16</option>
+    <option value="2 / 3">2:3</option> <!-- ADDED -->
   </select>
 
   <button id="snap">Take Photo</button>
@@ -134,20 +132,12 @@ video{
 </div>
 
 <div class="frame">
-
   <div class="window" id="window">
     <canvas id="canvas"></canvas>
   </div>
-
 </div>
 
-<video
-  id="video"
-  autoplay
-  muted
-  playsinline
-  webkit-playsinline
-></video>
+<video id="video" autoplay muted playsinline></video>
 
 <script>
 const video = document.getElementById("video");
@@ -157,7 +147,6 @@ const ctx = canvas.getContext("2d");
 const windowEl = document.getElementById("window");
 
 let ready = false;
-
 let scale = 1;
 let offsetX = 0;
 let offsetY = 0;
@@ -167,36 +156,24 @@ function resizeCanvas(){
   canvas.width = canvas.clientWidth;
   canvas.height = canvas.clientHeight;
 }
-
 window.addEventListener("resize", resizeCanvas);
 
 /* camera */
 async function startCamera(){
-
   try{
-
-    const stream =
-      await navigator.mediaDevices.getUserMedia({
-        audio:false,
-        video:{
-          facingMode:{ ideal:"environment" }
-        }
-      });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio:false,
+      video:{ facingMode:{ ideal:"environment" } }
+    });
 
     video.srcObject = stream;
 
-    await new Promise(resolve => {
-      video.onloadedmetadata = resolve;
-    });
-
+    await new Promise(r => video.onloadedmetadata = r);
     await video.play();
 
-    await new Promise(resolve =>
-      setTimeout(resolve, 200)
-    );
+    await new Promise(r => setTimeout(r, 200));
 
     resizeCanvas();
-
     ready = true;
 
     requestAnimationFrame(draw);
@@ -206,12 +183,10 @@ async function startCamera(){
     alert("Camera failed. Use HTTPS and allow permissions.");
   }
 }
-
 startCamera();
 
-/* draw loop */
+/* draw */
 function draw(){
-
   requestAnimationFrame(draw);
 
   if(!ready) return;
@@ -227,8 +202,8 @@ function draw(){
   const drawW = vw * scale;
   const drawH = vh * scale;
 
-  const x = (canvas.width - drawW) / 2 + offsetX;
-  const y = (canvas.height - drawH) / 2 + offsetY;
+  const x = (canvas.width - drawW)/2 + offsetX;
+  const y = (canvas.height - drawH)/2 + offsetY;
 
   ctx.drawImage(video, x, y, drawW, drawH);
 }
@@ -238,17 +213,17 @@ let dragging = false;
 let lastX = 0;
 let lastY = 0;
 
-canvas.addEventListener("pointerdown", e => {
+canvas.addEventListener("pointerdown", e=>{
   dragging = true;
   lastX = e.clientX;
   lastY = e.clientY;
 });
 
-window.addEventListener("pointerup", () => {
+window.addEventListener("pointerup", ()=>{
   dragging = false;
 });
 
-window.addEventListener("pointermove", e => {
+window.addEventListener("pointermove", e=>{
   if(!dragging) return;
 
   offsetX += e.clientX - lastX;
@@ -259,60 +234,25 @@ window.addEventListener("pointermove", e => {
 });
 
 /* zoom */
-canvas.addEventListener("wheel", e => {
+canvas.addEventListener("wheel", e=>{
   e.preventDefault();
 
   scale += e.deltaY * -0.001;
-
   scale = Math.max(1, Math.min(5, scale));
 },{ passive:false });
 
-/* pinch */
-let lastDist = null;
-
-canvas.addEventListener("touchstart", e => {
-  if(e.touches.length === 2){
-    lastDist = getDist(e.touches);
-  }
-},{ passive:false });
-
-canvas.addEventListener("touchmove", e => {
-  if(e.touches.length !== 2) return;
-
-  e.preventDefault();
-
-  const dist = getDist(e.touches);
-
-  if(lastDist){
-    scale *= dist / lastDist;
-    scale = Math.max(1, Math.min(5, scale));
-  }
-
-  lastDist = dist;
-},{ passive:false });
-
-canvas.addEventListener("touchend", () => {
-  lastDist = null;
-});
-
-function getDist(touches){
-  const dx = touches[0].clientX - touches[1].clientX;
-  const dy = touches[0].clientY - touches[1].clientY;
-  return Math.sqrt(dx*dx + dy*dy);
-}
-
-/* aspect ratio */
+/* aspect ratio switch */
 document.getElementById("ratio")
-.addEventListener("change", e => {
+.addEventListener("change", e=>{
   windowEl.style.aspectRatio = e.target.value;
   setTimeout(resizeCanvas, 50);
 });
 
 /* snapshot */
 document.getElementById("snap")
-.addEventListener("click", () => {
+.addEventListener("click", ()=>{
   const a = document.createElement("a");
-  a.download = "composition.png";
+  a.download = "gallery-photo.png";
   a.href = canvas.toDataURL("image/png");
   a.click();
 });
