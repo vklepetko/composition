@@ -103,7 +103,7 @@ video{
 <body>
 
 <div class="controls">
-  <button id="snap">Photo</button>
+  <button id="snap">Pause</button>
 </div>
 
 <div class="stage" id="stage">
@@ -129,6 +129,7 @@ let scale = 1;
 let offsetX = 0;
 let offsetY = 0;
 let ready = false;
+let isPaused = false;
 
 /* ---------------- WALL FIT ---------------- */
 function fitWall(){
@@ -171,6 +172,7 @@ window.addEventListener("resize", resize);
 function draw(){
   requestAnimationFrame(draw);
   if(!ready || video.readyState < 2) return;
+  if(isPaused) return;
 
   const vw = video.videoWidth;
   const vh = video.videoHeight;
@@ -186,6 +188,12 @@ function draw(){
   ctx.drawImage(video, x, y, w, h);
 }
 
+/* ---------------- PAUSE / PLAY TOGGLE ---------------- */
+document.getElementById("snap").onclick = () => {
+  isPaused = !isPaused;
+  document.getElementById("snap").textContent = isPaused ? "Play" : "Pause";
+};
+
 /* ---------------- SNAP (FULL EXPORT) ---------------- */
 document.getElementById("snap").onclick = async () => {
 
@@ -200,10 +208,8 @@ document.getElementById("snap").onclick = async () => {
 
   const ex = exportCanvas.getContext("2d");
 
-  // scale for sharp output
   ex.scale(scaleFactor, scaleFactor);
 
-  // 1. draw background (wall gradient like CSS)
   const gradient = ex.createRadialGradient(
     rect.width * 0.3, rect.height * 0.2, 100,
     rect.width * 0.5, rect.height * 0.5, rect.width
@@ -214,33 +220,27 @@ document.getElementById("snap").onclick = async () => {
   ex.fillStyle = gradient;
   ex.fillRect(0,0,rect.width,rect.height);
 
-  // 2. draw frame using DOM snapshot of just window area
   const windowEl = document.querySelector(".window");
   const winRect = windowEl.getBoundingClientRect();
 
-  // draw frame background
   ex.save();
   ex.translate(
     (rect.width - winRect.width)/2,
     (rect.height - winRect.height)/2
   );
 
-  // frame
   ex.fillStyle = "#f7f7f4";
   roundRect(ex, -100, -100, winRect.width + 200, winRect.height + 200, 8);
   ex.fill();
 
-  // window
   ex.fillStyle = "#fff";
   ex.fillRect(0,0,winRect.width,winRect.height);
 
-  // 3. draw video canvas content
   const sourceCanvas = document.getElementById("canvas");
   ex.drawImage(sourceCanvas, 0, 0, winRect.width, winRect.height);
 
   ex.restore();
 
-  // download
   const link = document.createElement("a");
   link.download = "gallery-photo.png";
   link.href = exportCanvas.toDataURL("image/png");
