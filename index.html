@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Auto Gallery Camera</title>
+<title>Wall Gallery Camera</title>
 
 <style>
 *{ box-sizing:border-box; }
@@ -11,7 +11,9 @@
 body{
   margin:0;
   min-height:100vh;
-  background:#eeeeeb;
+
+  /* 🧱 real wall feel (not pure white UI) */
+  background: radial-gradient(circle at 30% 20%, #f6f6f2, #e7e7e2);
 
   display:flex;
   flex-direction:column;
@@ -20,7 +22,7 @@ body{
   gap:16px;
 
   font-family:Arial,sans-serif;
-  padding:20px;
+  padding:30px;
 }
 
 /* controls */
@@ -37,29 +39,42 @@ button, select{
   font-size:16px;
 }
 
-/* gallery wall */
+/* 🧱 WALL DEPTH LAYER */
 .frame{
-  background:#f7f7f4;
-  padding:100px;
-  box-shadow:0 60px 160px rgba(0,0,0,.20);
-  border-radius:8px;
+  position:relative;
+  padding:110px;
+
+  /* soft wall shadow around frame area */
+  background:rgba(255,255,255,0.25);
+
+  border-radius:10px;
+
+  /* makes it feel mounted on wall */
+  box-shadow:
+    inset 0 0 80px rgba(0,0,0,.08);
 }
 
-/* ART FRAME */
+/* 🖼️ FRAME BODY (3D effect) */
 .window{
   position:relative;
   width:min(90vw,900px);
-  aspect-ratio:4 / 3; /* default */
+  aspect-ratio:4 / 3;
 
   overflow:hidden;
   background:#fff;
 
-  box-shadow:0 30px 90px rgba(0,0,0,.18);
+  /* outer frame thickness illusion */
+  border:18px solid #fdfdfc;
 
-  touch-action:none;
+  /* depth from wall */
+  box-shadow:
+    0 25px 60px rgba(0,0,0,.25),
+    0 6px 18px rgba(0,0,0,.15);
+
+  transform: translateY(-2px);
 }
 
-/* museum mat */
+/* 🧠 MAT LAYER (rectangular, clean cutout) */
 .window::before{
   content:"";
   position:absolute;
@@ -67,22 +82,24 @@ button, select{
   pointer-events:none;
   z-index:3;
 
-  background:#fff;
+  background:#ffffff;
 
-  padding:60px;
+  padding:55px;
 
+  /* clean museum cutout */
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
           mask-composite: exclude;
 
+  /* depth inside frame */
   box-shadow:
     inset 0 0 0 1px rgba(0,0,0,.06),
-    inset 0 20px 60px rgba(0,0,0,.10);
+    inset 0 18px 50px rgba(0,0,0,.12);
 }
 
-/* artwork */
+/* 📸 IMAGE LAYER */
 canvas{
   width:100%;
   height:100%;
@@ -92,7 +109,7 @@ canvas{
   z-index:1;
 }
 
-/* hidden camera */
+/* 📷 hidden camera */
 video{
   position:fixed;
   top:0;
@@ -101,7 +118,6 @@ video{
   height:2px;
   opacity:0.001;
   pointer-events:none;
-  z-index:-1;
 }
 </style>
 </head>
@@ -110,7 +126,6 @@ video{
 
 <div class="controls">
   <select id="ratio">
-    <option value="auto">Auto (Device)</option>
     <option value="4 / 3">4:3</option>
     <option value="1 / 1">1:1</option>
     <option value="16 / 9">16:9</option>
@@ -134,7 +149,6 @@ const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const windowEl = document.getElementById("window");
-const ratioSelect = document.getElementById("ratio");
 
 let ready = false;
 let scale = 1;
@@ -147,37 +161,6 @@ function resizeCanvas(){
   canvas.height = canvas.clientHeight;
 }
 window.addEventListener("resize", resizeCanvas);
-
-/* AUTO ORIENTATION LOGIC */
-function updateOrientation(){
-
-  const isPortrait = window.innerHeight > window.innerWidth;
-
-  if(ratioSelect.value === "auto"){
-
-    if(isPortrait){
-      windowEl.style.aspectRatio = "2 / 3";
-    }else{
-      windowEl.style.aspectRatio = "4 / 3";
-    }
-
-    setTimeout(resizeCanvas, 50);
-  }
-}
-
-/* listen for rotation */
-window.addEventListener("resize", updateOrientation);
-window.addEventListener("orientationchange", updateOrientation);
-
-/* manual override */
-ratioSelect.addEventListener("change", e=>{
-  if(e.target.value === "auto"){
-    updateOrientation();
-  }else{
-    windowEl.style.aspectRatio = e.target.value;
-    setTimeout(resizeCanvas, 50);
-  }
-});
 
 /* camera */
 async function startCamera(){
@@ -195,19 +178,17 @@ async function startCamera(){
     await new Promise(r => setTimeout(r, 200));
 
     resizeCanvas();
-    updateOrientation();
-
     ready = true;
+
     requestAnimationFrame(draw);
 
   }catch(err){
-    console.error(err);
     alert("Camera failed. Use HTTPS and allow permissions.");
   }
 }
 startCamera();
 
-/* draw */
+/* draw loop */
 function draw(){
   requestAnimationFrame(draw);
 
@@ -258,10 +239,16 @@ window.addEventListener("pointermove", e=>{
 /* zoom */
 canvas.addEventListener("wheel", e=>{
   e.preventDefault();
-
   scale += e.deltaY * -0.001;
   scale = Math.max(1, Math.min(5, scale));
 },{ passive:false });
+
+/* aspect ratio */
+document.getElementById("ratio")
+.addEventListener("change", e=>{
+  windowEl.style.aspectRatio = e.target.value;
+  setTimeout(resizeCanvas, 50);
+});
 
 /* snapshot */
 document.getElementById("snap")
