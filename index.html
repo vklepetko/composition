@@ -3,17 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Gallery Camera</title>
+<title>Auto Gallery Camera</title>
 
 <style>
-*{
-  box-sizing:border-box;
-}
+*{ box-sizing:border-box; }
 
 body{
   margin:0;
   min-height:100vh;
-
   background:#eeeeeb;
 
   display:flex;
@@ -40,8 +37,6 @@ button, select{
   font-size:16px;
 }
 
-button{ cursor:pointer; }
-
 /* gallery wall */
 .frame{
   background:#f7f7f4;
@@ -54,18 +49,17 @@ button{ cursor:pointer; }
 .window{
   position:relative;
   width:min(90vw,900px);
-
-  aspect-ratio:4 / 3;
+  aspect-ratio:4 / 3; /* default */
 
   overflow:hidden;
-  background:#ffffff;
+  background:#fff;
 
   box-shadow:0 30px 90px rgba(0,0,0,.18);
 
   touch-action:none;
 }
 
-/* 🧠 REAL RECTANGULAR MUSEUM MAT */
+/* museum mat */
 .window::before{
   content:"";
   position:absolute;
@@ -73,32 +67,27 @@ button{ cursor:pointer; }
   pointer-events:none;
   z-index:3;
 
-  background:#ffffff;
+  background:#fff;
 
-  /* creates thick mat opening */
   padding:60px;
 
-  /* IMPORTANT: rectangular cutout (no circle) */
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
           mask-composite: exclude;
 
-  /* mat depth */
   box-shadow:
     inset 0 0 0 1px rgba(0,0,0,.06),
     inset 0 20px 60px rgba(0,0,0,.10);
 }
 
-/* ARTWORK */
+/* artwork */
 canvas{
   width:100%;
   height:100%;
   display:block;
-
   background:#fff;
-
   position:relative;
   z-index:1;
 }
@@ -108,11 +97,9 @@ video{
   position:fixed;
   top:0;
   left:0;
-
   width:2px;
   height:2px;
   opacity:0.001;
-
   pointer-events:none;
   z-index:-1;
 }
@@ -122,8 +109,8 @@ video{
 <body>
 
 <div class="controls">
-
   <select id="ratio">
+    <option value="auto">Auto (Device)</option>
     <option value="4 / 3">4:3</option>
     <option value="1 / 1">1:1</option>
     <option value="16 / 9">16:9</option>
@@ -132,7 +119,6 @@ video{
   </select>
 
   <button id="snap">Take Photo</button>
-
 </div>
 
 <div class="frame">
@@ -147,8 +133,8 @@ video{
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-
 const windowEl = document.getElementById("window");
+const ratioSelect = document.getElementById("ratio");
 
 let ready = false;
 let scale = 1;
@@ -161,6 +147,37 @@ function resizeCanvas(){
   canvas.height = canvas.clientHeight;
 }
 window.addEventListener("resize", resizeCanvas);
+
+/* AUTO ORIENTATION LOGIC */
+function updateOrientation(){
+
+  const isPortrait = window.innerHeight > window.innerWidth;
+
+  if(ratioSelect.value === "auto"){
+
+    if(isPortrait){
+      windowEl.style.aspectRatio = "2 / 3";
+    }else{
+      windowEl.style.aspectRatio = "4 / 3";
+    }
+
+    setTimeout(resizeCanvas, 50);
+  }
+}
+
+/* listen for rotation */
+window.addEventListener("resize", updateOrientation);
+window.addEventListener("orientationchange", updateOrientation);
+
+/* manual override */
+ratioSelect.addEventListener("change", e=>{
+  if(e.target.value === "auto"){
+    updateOrientation();
+  }else{
+    windowEl.style.aspectRatio = e.target.value;
+    setTimeout(resizeCanvas, 50);
+  }
+});
 
 /* camera */
 async function startCamera(){
@@ -178,8 +195,9 @@ async function startCamera(){
     await new Promise(r => setTimeout(r, 200));
 
     resizeCanvas();
-    ready = true;
+    updateOrientation();
 
+    ready = true;
     requestAnimationFrame(draw);
 
   }catch(err){
@@ -189,7 +207,7 @@ async function startCamera(){
 }
 startCamera();
 
-/* draw loop */
+/* draw */
 function draw(){
   requestAnimationFrame(draw);
 
@@ -244,13 +262,6 @@ canvas.addEventListener("wheel", e=>{
   scale += e.deltaY * -0.001;
   scale = Math.max(1, Math.min(5, scale));
 },{ passive:false });
-
-/* aspect ratio */
-document.getElementById("ratio")
-.addEventListener("change", e=>{
-  windowEl.style.aspectRatio = e.target.value;
-  setTimeout(resizeCanvas, 50);
-});
 
 /* snapshot */
 document.getElementById("snap")
