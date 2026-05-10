@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+/>
 
 <title>Composition Camera</title>
 
@@ -28,12 +31,26 @@ body{
 .controls{
   display:flex;
   gap:10px;
+  flex-wrap:wrap;
+}
+
+button,
+select{
+  padding:10px 14px;
+  border:none;
+  border-radius:10px;
+  font-size:16px;
+}
+
+button{
+  cursor:pointer;
 }
 
 .frame{
   background:#f8f8f5;
-  padding:60px;
+  padding:40px;
   box-shadow:0 20px 60px rgba(0,0,0,.5);
+  max-width:100%;
 }
 
 .window{
@@ -49,40 +66,54 @@ canvas{
   width:100%;
   height:100%;
   display:block;
+  touch-action:none;
 }
 
-/* IMPORTANT:
-   Safari camera bug fix:
-   keep video in DOM and renderable
+/*
+  SAFARI FIX:
+  video MUST remain renderable
 */
 video{
-  position:absolute;
-  left:-9999px;
-  top:-9999px;
-  width:1px;
-  height:1px;
-  opacity:0.01;
+  position:fixed;
+  top:0;
+  left:0;
+
+  width:2px;
+  height:2px;
+
+  opacity:0.001;
+
   pointer-events:none;
+
+  z-index:-1;
 }
 </style>
 </head>
 <body>
 
 <div class="controls">
+
   <select id="ratio">
-    <option value="4/3">4:3</option>
-    <option value="1/1">1:1</option>
-    <option value="16/9">16:9</option>
-    <option value="9/16">9:16</option>
+    <option value="4 / 3">4:3</option>
+    <option value="1 / 1">1:1</option>
+    <option value="16 / 9">16:9</option>
+    <option value="9 / 16">9:16</option>
   </select>
 
-  <button id="snap">Take Photo</button>
+  <button id="snap">
+    Take Photo
+  </button>
+
 </div>
 
 <div class="frame">
+
   <div class="window" id="window">
+
     <canvas id="canvas"></canvas>
+
   </div>
+
 </div>
 
 <video
@@ -98,107 +129,149 @@ const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
+const windowEl = document.getElementById("window");
+
+let ready = false;
+
 let scale = 1;
 let offsetX = 0;
 let offsetY = 0;
 
-let ready = false;
+/* -------------------------------- */
+/* CANVAS SIZE                      */
+/* -------------------------------- */
 
-/* ---------- CAMERA ---------- */
+function resizeCanvas(){
 
-async function startCamera() {
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+}
 
-  try {
+window.addEventListener("resize", resizeCanvas);
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio:false,
-      video:{
-        facingMode:{
-          ideal:"environment"
+/* -------------------------------- */
+/* CAMERA                           */
+/* -------------------------------- */
+
+async function startCamera(){
+
+  try{
+
+    const stream =
+      await navigator.mediaDevices.getUserMedia({
+        audio:false,
+        video:{
+          facingMode:{
+            ideal:"environment"
+          }
         }
-      }
-    });
+      });
 
     video.srcObject = stream;
 
-    // REQUIRED for Safari
-    await video.play();
-
-    // Safari reliability
+    /*
+      IMPORTANT:
+      Safari needs metadata FIRST
+    */
     await new Promise(resolve => {
       video.onloadedmetadata = resolve;
     });
 
-    // set canvas ONCE
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    await video.play();
+
+    /*
+      Extra Safari stability delay
+    */
+    await new Promise(resolve =>
+      setTimeout(resolve, 200)
+    );
+
+    resizeCanvas();
 
     ready = true;
 
     requestAnimationFrame(draw);
 
-  } catch(err) {
+  }catch(err){
 
     console.error(err);
 
     alert(
       "Camera failed.\n\n" +
-      "Use HTTPS and allow camera permissions."
+      "Make sure:\n" +
+      "- You are using HTTPS\n" +
+      "- Camera permission is allowed"
     );
   }
 }
 
 startCamera();
 
-/* ---------- DRAW ---------- */
+/* -------------------------------- */
+/* DRAW LOOP                        */
+/* -------------------------------- */
 
-function draw() {
+function draw(){
 
-  if (!ready) {
-    requestAnimationFrame(draw);
-    return;
-  }
+  requestAnimationFrame(draw);
+
+  if(!ready) return;
+
+  /*
+    Safari readiness check
+  */
+  if(video.readyState < 2) return;
 
   const vw = video.videoWidth;
   const vh = video.videoHeight;
 
-  if (!vw || !vh) {
-    requestAnimationFrame(draw);
-    return;
-  }
+  if(!vw || !vh) return;
 
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   const drawW = vw * scale;
   const drawH = vh * scale;
 
-  const x = (canvas.width - drawW)/2 + offsetX;
-  const y = (canvas.height - drawH)/2 + offsetY;
+  const x =
+    (canvas.width - drawW) / 2 + offsetX;
 
-  ctx.drawImage(video, x, y, drawW, drawH);
+  const y =
+    (canvas.height - drawH) / 2 + offsetY;
 
-  requestAnimationFrame(draw);
+  ctx.drawImage(
+    video,
+    x,
+    y,
+    drawW,
+    drawH
+  );
 }
 
-/* ---------- DRAG ---------- */
+/* -------------------------------- */
+/* DRAG                             */
+/* -------------------------------- */
 
 let dragging = false;
+
 let lastX = 0;
 let lastY = 0;
 
 canvas.addEventListener("pointerdown", e => {
+
   dragging = true;
+
   lastX = e.clientX;
   lastY = e.clientY;
 });
 
 window.addEventListener("pointerup", () => {
+
   dragging = false;
 });
 
 window.addEventListener("pointermove", e => {
 
-  if (!dragging) return;
+  if(!dragging) return;
 
   offsetX += e.clientX - lastX;
   offsetY += e.clientY - lastY;
@@ -207,72 +280,118 @@ window.addEventListener("pointermove", e => {
   lastY = e.clientY;
 });
 
-/* ---------- WHEEL ZOOM ---------- */
+/* -------------------------------- */
+/* WHEEL ZOOM                       */
+/* -------------------------------- */
 
-canvas.addEventListener("wheel", e => {
+canvas.addEventListener(
+  "wheel",
+  e => {
 
-  e.preventDefault();
+    e.preventDefault();
 
-  scale += e.deltaY * -0.001;
+    scale += e.deltaY * -0.001;
 
-  scale = Math.max(1, Math.min(5, scale));
+    scale = Math.max(
+      1,
+      Math.min(5, scale)
+    );
+  },
+  { passive:false }
+);
 
-}, { passive:false });
-
-/* ---------- PINCH ---------- */
+/* -------------------------------- */
+/* PINCH ZOOM                       */
+/* -------------------------------- */
 
 let lastDist = null;
 
-canvas.addEventListener("touchstart", e => {
+canvas.addEventListener(
+  "touchstart",
+  e => {
 
-  if (e.touches.length === 2) {
-    lastDist = getDist(e.touches);
-  }
+    if(e.touches.length === 2){
 
-}, { passive:false });
+      lastDist = getDist(e.touches);
+    }
+  },
+  { passive:false }
+);
 
-canvas.addEventListener("touchmove", e => {
+canvas.addEventListener(
+  "touchmove",
+  e => {
 
-  if (e.touches.length !== 2) return;
+    if(e.touches.length !== 2) return;
 
-  e.preventDefault();
+    e.preventDefault();
 
-  const d = getDist(e.touches);
+    const dist = getDist(e.touches);
 
-  if (lastDist) {
-    scale *= d / lastDist;
-    scale = Math.max(1, Math.min(5, scale));
-  }
+    if(lastDist){
 
-  lastDist = d;
+      scale *= dist / lastDist;
 
-}, { passive:false });
+      scale = Math.max(
+        1,
+        Math.min(5, scale)
+      );
+    }
+
+    lastDist = dist;
+  },
+  { passive:false }
+);
+
+canvas.addEventListener("touchend", () => {
+
+  lastDist = null;
+});
 
 function getDist(touches){
 
-  const dx = touches[0].clientX - touches[1].clientX;
-  const dy = touches[0].clientY - touches[1].clientY;
+  const dx =
+    touches[0].clientX -
+    touches[1].clientX;
+
+  const dy =
+    touches[0].clientY -
+    touches[1].clientY;
 
   return Math.sqrt(dx*dx + dy*dy);
 }
 
-/* ---------- RATIO ---------- */
+/* -------------------------------- */
+/* ASPECT RATIO                     */
+/* -------------------------------- */
 
-document.getElementById("ratio").addEventListener("change", e => {
-  document.getElementById("window").style.aspectRatio = e.target.value;
-});
+document
+  .getElementById("ratio")
+  .addEventListener("change", e => {
 
-/* ---------- SNAPSHOT ---------- */
+    windowEl.style.aspectRatio =
+      e.target.value;
 
-document.getElementById("snap").addEventListener("click", () => {
+    setTimeout(resizeCanvas, 50);
+  });
 
-  const a = document.createElement("a");
+/* -------------------------------- */
+/* SNAPSHOT                         */
+/* -------------------------------- */
 
-  a.download = "composition.png";
-  a.href = canvas.toDataURL("image/png");
+document
+  .getElementById("snap")
+  .addEventListener("click", () => {
 
-  a.click();
-});
+    const a = document.createElement("a");
+
+    a.download = "composition.png";
+
+    a.href =
+      canvas.toDataURL("image/png");
+
+    a.click();
+  });
 </script>
 
 </body>
