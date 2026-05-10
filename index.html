@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Fit Gallery Camera</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fit Gallery Upload</title>
 
 <style>
 *{ box-sizing:border-box; }
@@ -35,6 +35,8 @@ body{
   position:fixed;
   top:20px;
   left:20px;
+  display:flex;
+  gap:10px;
   z-index:10;
 }
 
@@ -43,6 +45,11 @@ button{
   border:none;
   border-radius:10px;
   font-size:16px;
+  cursor:pointer;
+}
+
+input[type="file"]{
+  display:none;
 }
 
 .frame{
@@ -62,40 +69,11 @@ button{
   overflow:hidden;
 }
 
-.window::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-  z-index:3;
-  background:#fff;
-  padding:55px;
-
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
-
-  box-shadow:
-    inset 0 0 0 1px rgba(0,0,0,.06),
-    inset 0 18px 50px rgba(0,0,0,.12);
-}
-
 canvas{
   width:100%;
   height:100%;
   display:block;
   touch-action:none;
-}
-
-video{
-  position:fixed;
-  top:0;
-  left:0;
-  width:2px;
-  height:2px;
-  opacity:0.001;
 }
 </style>
 </head>
@@ -103,7 +81,12 @@ video{
 <body>
 
 <div class="controls">
-  <button id="snap">Photo</button>
+  <label>
+    <button>Upload Photo</button>
+    <input id="upload" type="file" accept="image/*">
+  </label>
+
+  <button id="snap">Export</button>
 </div>
 
 <div class="stage" id="stage">
@@ -116,19 +99,18 @@ video{
   </div>
 </div>
 
-<video id="video" autoplay muted playsinline></video>
-
 <script>
-const wall = document.getElementById("wall");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-const video = document.getElementById("video");
-const stage = document.getElementById("stage");
+const wall = document.getElementById("wall");
+const upload = document.getElementById("upload");
+
+let img = new Image();
+let imgLoaded = false;
 
 let scale = 1;
 let offsetX = 0;
 let offsetY = 0;
-let ready = false;
 
 /* ---------------- WALL FIT ---------------- */
 function fitWall(){
@@ -144,121 +126,53 @@ function fitWall(){
 window.addEventListener("resize", fitWall);
 fitWall();
 
-/* ---------------- CAMERA ---------------- */
-async function startCamera(){
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:"environment" },
-    audio:false
-  });
-
-  video.srcObject = stream;
-  await video.play();
-
-  resize();
-  ready = true;
-  requestAnimationFrame(draw);
-}
-startCamera();
-
-/* ---------------- CANVAS ---------------- */
+/* ---------------- CANVAS SIZE ---------------- */
 function resize(){
   canvas.width = canvas.clientWidth;
   canvas.height = canvas.clientHeight;
+  draw();
 }
 window.addEventListener("resize", resize);
+resize();
 
-/* ---------------- DRAW VIDEO ---------------- */
+/* ---------------- IMAGE UPLOAD ---------------- */
+upload.addEventListener("change", (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (evt)=>{
+    img = new Image();
+    img.onload = ()=>{
+      imgLoaded = true;
+      scale = 1;
+      offsetX = 0;
+      offsetY = 0;
+      draw();
+    };
+    img.src = evt.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+/* ---------------- DRAW IMAGE ---------------- */
 function draw(){
-  requestAnimationFrame(draw);
-  if(!ready || video.readyState < 2) return;
-
-  const vw = video.videoWidth;
-  const vh = video.videoHeight;
-
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  const w = vw * scale;
-  const h = vh * scale;
+  if(!imgLoaded) return;
+
+  const w = img.width * scale;
+  const h = img.height * scale;
 
   const x = (canvas.width - w)/2 + offsetX;
   const y = (canvas.height - h)/2 + offsetY;
 
-  ctx.drawImage(video, x, y, w, h);
+  ctx.drawImage(img, x, y, w, h);
+  requestAnimationFrame(draw);
 }
+draw();
 
-/* ---------------- SNAP (FULL EXPORT) ---------------- */
-document.getElementById("snap").onclick = async () => {
-
-  // scale up for high quality export
-  const exportCanvas = document.createElement("canvas");
-  const rect = stage.getBoundingClientRect();
-
-  const scaleFactor = 2;
-
-  exportCanvas.width = rect.width * scaleFactor;
-  exportCanvas.height = rect.height * scaleFactor;
-
-  const ex = exportCanvas.getContext("2d");
-
-  // scale for sharp output
-  ex.scale(scaleFactor, scaleFactor);
-
-  // 1. draw background (wall gradient like CSS)
-  const gradient = ex.createRadialGradient(
-    rect.width * 0.3, rect.height * 0.2, 100,
-    rect.width * 0.5, rect.height * 0.5, rect.width
-  );
-  gradient.addColorStop(0, "#f6f6f2");
-  gradient.addColorStop(1, "#e7e7e2");
-
-  ex.fillStyle = gradient;
-  ex.fillRect(0,0,rect.width,rect.height);
-
-  // 2. draw frame using DOM snapshot of just window area
-  const windowEl = document.querySelector(".window");
-  const winRect = windowEl.getBoundingClientRect();
-
-  // draw frame background
-  ex.save();
-  ex.translate(
-    (rect.width - winRect.width)/2,
-    (rect.height - winRect.height)/2
-  );
-
-  // frame
-  ex.fillStyle = "#f7f7f4";
-  roundRect(ex, -100, -100, winRect.width + 200, winRect.height + 200, 8);
-  ex.fill();
-
-  // window
-  ex.fillStyle = "#fff";
-  ex.fillRect(0,0,winRect.width,winRect.height);
-
-  // 3. draw video canvas content
-  const sourceCanvas = document.getElementById("canvas");
-  ex.drawImage(sourceCanvas, 0, 0, winRect.width, winRect.height);
-
-  ex.restore();
-
-  // download
-  const link = document.createElement("a");
-  link.download = "gallery-photo.png";
-  link.href = exportCanvas.toDataURL("image/png");
-  link.click();
-};
-
-/* ---------------- helpers ---------------- */
-function roundRect(ctx, x, y, w, h, r){
-  ctx.beginPath();
-  ctx.moveTo(x+r,y);
-  ctx.arcTo(x+w,y,x+w,y+h,r);
-  ctx.arcTo(x+w,y+h,x,y+h,r);
-  ctx.arcTo(x,y+h,x,y,r);
-  ctx.arcTo(x,y,x+w,y,r);
-  ctx.closePath();
-}
-
-/* ---------------- interactions ---------------- */
+/* ---------------- DRAG + PINCH ---------------- */
 let pointers = new Map();
 let dragging = false;
 let lx = 0, ly = 0;
@@ -296,7 +210,7 @@ canvas.addEventListener("pointermove", e=>{
     const d = dist(pts[0], pts[1]);
 
     scale = startScale * (d / startDist);
-    scale = Math.max(1, Math.min(5, scale));
+    scale = Math.max(0.2, Math.min(5, scale));
     return;
   }
 
@@ -316,6 +230,76 @@ function endPointer(e){
 
 canvas.addEventListener("pointerup", endPointer);
 canvas.addEventListener("pointercancel", endPointer);
+
+/* ---------------- EXPORT (FRAME + WALL + IMAGE) ---------------- */
+document.getElementById("snap").onclick = ()=>{
+
+  const stage = document.getElementById("stage");
+  const rect = stage.getBoundingClientRect();
+
+  const exportCanvas = document.createElement("canvas");
+  const ex = exportCanvas.getContext("2d");
+
+  const scaleFactor = 2;
+
+  exportCanvas.width = rect.width * scaleFactor;
+  exportCanvas.height = rect.height * scaleFactor;
+
+  ex.scale(scaleFactor, scaleFactor);
+
+  // background (wall)
+  const gradient = ex.createRadialGradient(
+    rect.width * 0.3, rect.height * 0.2, 100,
+    rect.width * 0.5, rect.height * 0.5, rect.width
+  );
+
+  gradient.addColorStop(0, "#f6f6f2");
+  gradient.addColorStop(1, "#e7e7e2");
+
+  ex.fillStyle = gradient;
+  ex.fillRect(0,0,rect.width,rect.height);
+
+  // window placement
+  const windowEl = document.querySelector(".window");
+  const winRect = windowEl.getBoundingClientRect();
+
+  const offsetX = (rect.width - winRect.width)/2;
+  const offsetY = (rect.height - winRect.height)/2;
+
+  ex.save();
+  ex.translate(offsetX, offsetY);
+
+  // frame
+  ex.fillStyle = "#f7f7f4";
+  roundRect(ex, -100, -100, winRect.width + 200, winRect.height + 200, 8);
+  ex.fill();
+
+  // window
+  ex.fillStyle = "#fff";
+  ex.fillRect(0,0,winRect.width,winRect.height);
+
+  // image from canvas
+  const sourceCanvas = document.getElementById("canvas");
+  ex.drawImage(sourceCanvas, 0, 0, winRect.width, winRect.height);
+
+  ex.restore();
+
+  const link = document.createElement("a");
+  link.download = "gallery-upload.png";
+  link.href = exportCanvas.toDataURL("image/png");
+  link.click();
+};
+
+/* ---------------- helper ---------------- */
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
 </script>
 
 </body>
